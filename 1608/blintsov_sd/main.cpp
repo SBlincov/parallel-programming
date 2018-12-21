@@ -1,80 +1,74 @@
 #include <iostream>
-#include <ctime>
-#include <cmath>
 #include "mpi.h"
+#include <cmath>
 
-double current_function(double x) { return cos(x)*sin(x)-tan(x)*48*x*x+2*x-x; }
-
-double find_integral(double a, double b, int steps) {
-    clock_t t0;
-    clock_t t1;
-
-    t0 = clock();
-
-    double result = .0;
-
-    double step = (b-a)/steps;
-    for (int x(0); x <= steps; ++x)
-        result += current_function(a + step * (x + 0.5f));
-    result *= step;
-
-    t1 = clock();
-
-    std::cout << "---NON PARALLEL PROGRAM---\n";
-    std::cout << "result = " << result << "\n";
-    std::cout << "time = " << (double)(t1 - t0) / CLOCKS_PER_SEC << "\n\n";
-
-    return result;
+double f(double a) {
+    return (4.0 / (1.0 + a*a));
 }
 
-double find_integral_parallel(double a, double b, int steps) {
-    clock_t t0;
-    clock_t t1;
+void find_integral(double a, double b, int steps) {
+    double t1 = 0, t2 = 0, step, result = 0;
 
-    double step;
-    double result = .0;
-    double result_mpi = .0;
+    t1 = MPI_Wtime();
 
-    // MPI definitions
-    int ProcRank, ProcNum;
+    if (steps > 0) {
+        step = (b-a) / (double) steps;
 
-    // MPI initialisations
-    MPI_Init(NULL, NULL);
+        for (int x(0); x <= steps; ++x)
+            result += f(a + step * (x + 0.5f));
+        result *= step;
+
+        t2 = MPI_Wtime();
+        std::cout << "---NON PARALLEL PROGRAM---\n";
+        std::cout << result << std::endl;
+        std::cout << "Time = " << t2-t1 << std::endl;
+    }
+}
+
+int main(int argc, char *argv[]) {
+    int ProcRank, ProcNum, i, steps = 0;
+    double t1 = 0, t2 = 0, sum, a = 0, b = 0, step, step_result, result;
+    bool done = false;
+
+    std::cout << "Enter the number of intervals: ";
+    std::cin >> steps;
+    std::cout << "Enter a,b: ";
+    std::cin >> a >> b;
+
+// RUN NON-PARALLEL VERSION
+    find_integral(a,b,steps);
+
+// START PARALLEL VERSION
+    MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &ProcNum);
     MPI_Comm_rank(MPI_COMM_WORLD, &ProcRank);
 
-    if (ProcRank == 0)
-        t0 = clock();
+    while (!done) {
+        if (ProcRank == 0)
+            t1 = MPI_Wtime();
 
-    MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&a, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&b, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    if ((a <= b) && (steps > 0)) {
-        step = (b - a) / double(steps);
-
-        for (int i(ProcRank); i <= steps; i += ProcNum)
-            result += current_function(a + step * (i + 0.5f));
-        result *= step;
-
-        MPI_Reduce(&result, &result_mpi, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-
-        if (ProcRank == 0) {
-            t1 = clock();
-
-            std::cout << "---PARALLEL PROGRAM---\n";
-            std::cout << "result_mpi = " << result_mpi << "\n";
-            std::cout << "time = " << (double)(t1 - t0) / CLOCKS_PER_SEC << "\n";
+        MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        if (steps > 0) {
+            step = (b-a) / (double) steps;
+            sum = 0.0;
+            for (i = ProcRank + 1; i <= steps; i += ProcNum) {
+                sum += f(a + step * (static_cast<double>(i) - 0.5));
+            }
+            step_result = step * sum;
+            MPI_Reduce(&step_result, &result, 1, MPI_DOUBLE, MPI_SUM, 0,
+                       MPI_COMM_WORLD);
+            if (ProcRank == 0) {
+                t2 = MPI_Wtime();
+                std::cout << "---PARALLEL PROGRAM---\n";
+                std::cout << result << std::endl;
+                std::cout << "Time = " << t2-t1 << std::endl;
+                done = true;
+            }
         }
+        else done = true;
     }
 
     MPI_Finalize();
-
-    return result;
-}
-
-int main() {
-    find_integral(-100, 50000000, 10000000);
-    find_integral_parallel(-100, 50000000, 10000000);
+// END PARALLEL VERSION
     return 0;
 }
