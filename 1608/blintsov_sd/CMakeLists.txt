@@ -8,4 +8,4 @@ if ( MPI_FOUND )
     include_directories( ${MPI_INCLUDE_PATH} )
 endif( MPI_FOUND )
 
-add_executable(blintsov_sd main.cpp)
+add_executable(blintsov_sd lab1/main.cpp)
