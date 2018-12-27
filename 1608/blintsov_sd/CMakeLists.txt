@@ -7,5 +7,10 @@ find_package ( MPI )
 if ( MPI_FOUND )
     include_directories( ${MPI_INCLUDE_PATH} )
 endif( MPI_FOUND )
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+
 
 add_executable(blintsov_sd lab3/main.cpp)
+
+target_link_libraries(blintsov_sd ${OpenCV_LIBS})
